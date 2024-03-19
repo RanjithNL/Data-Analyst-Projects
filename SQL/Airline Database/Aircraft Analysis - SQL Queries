@@ -1,0 +1,403 @@
+1.	Represent the “book_date” column in “yyyy-mmm-dd” format using Bookings table 
+    Expected output: book_ref, book_date (in “yyyy-mmm-dd” format) , total amount 
+Answer: 
+
+SELECT BOOK_REF,TO_CHAR(BOOK_DATE,'yyyy-mon-dd')       
+BOOK_DATE,TOTAL_AMOUNT
+FROM BOOKINGS
+
+2.	Get the following columns in the exact same sequence.
+    Expected columns in the output: ticket_no, boarding_no, seat_number, passenger_id, passenger_name.
+Answer: 
+
+ SELECT DISTINCT
+    T.TICKET_NO,
+    B.BOARDING_NO,
+    B.SEAT_NO AS SEAT_NUMBER,
+    T.PASSENGER_ID,
+    T.PASSENGER_NAME
+FROM
+    TICKETS T
+JOIN
+    BOARDING_PASSES B ON T.TICKET_NO = B.TICKET_NO;
+
+
+3.	Write a query to find the seat number which is least allocated among all the seats?
+Answer:
+
+SELECT SEAT_NO FROM(
+SELECT SEAT_NO ,COUNT(*) as LEAST_SEAT_COUNT
+FROM BOARDING_PASSES
+GROUP BY SEAT_NO
+ORDER BY LEAST_SEAT_COUNT ASC) LEAST_SEAT_NO
+WHERE LEAST_SEAT_COUNT=1
+
+
+4.	In the database, identify the month wise highest paying passenger name and passenger id.
+    Expected output: Month_name(“mmm-yy” format), passenger_id, passenger_name and total amount
+Answer:
+
+WITH LIST_OF_PASSENGERS AS (
+SELECT TO_CHAR(B.BOOK_DATE,'mon-YYYY') MONTH_NAME ,
+T.PASSENGER_ID,T.PASSENGER_NAME,SUM(B.TOTAL_AMOUNT) TOTAL_AMOUNT
+FROM BOOKINGS B JOIN TICKETS T ON B.BOOK_REF=T.BOOK_REF
+GROUP BY 1,2,3 ORDER BY 4 DESC),
+HIGHEST_PAYING_PASSENGER AS(
+SELECT * ,
+RANK() OVER(PARTITION BY MONTH_NAME ORDER BY TOTAL_AMOUNT DESC) PASSENGER_RANK
+FROM LIST_OF_PASSENGERS)
+SELECT MONTH_NAME ,
+PASSENGER_ID,PASSENGER_NAME,TOTAL_AMOUNT FROM HIGHEST_PAYING_PASSENGER
+WHERE PASSENGER_RANK=1
+
+
+5.	In the database, identify the month wise least paying passenger name and passenger id?
+    Expected output: Month_name(“mmm-yy” format), passenger_id, passenger_name and total amount
+Answer:
+
+WITH LIST_OF_PASSENGERS AS
+ (SELECT TO_CHAR(B.BOOK_DATE,'mon-YYYY') MONTH_NAME ,
+T.PASSENGER_ID,T.PASSENGER_NAME,SUM(B.TOTAL_AMOUNT) TOTAL_AMOUNT
+FROM BOOKINGS B JOIN TICKETS T ON B.BOOK_REF=T.BOOK_REF
+GROUP BY 1,2,3 ORDER BY 4 ASC),
+LEAST_PAYING_PASSENGER AS(
+SELECT * ,
+RANK() OVER(PARTITION BY MONTH_NAME ORDER BY TOTAL_AMOUNT ASC) PASSENGER_RANK
+FROM LIST_OF_PASSENGERS)
+SELECT MONTH_NAME ,
+PASSENGER_ID,PASSENGER_NAME,TOTAL_AMOUNT FROM LEAST_PAYING_PASSENGER
+WHERE PASSENGER_RANK=1
+
+
+6.	Identify the travel details of non stop journeys  or return journeys (having more than 1 flight).
+    Expected Output: Passenger_id, passenger_name, ticket_number and flight count.
+Answer:
+
+SELECT PASSENGER_ID,PASSENGER_NAME,TF.TICKET_NO AS TICKET_NUMBER,
+COUNT(F.FLIGHT_ID) FLIGHT_COUNT
+ FROM TICKET_FLIGHTS TF JOIN 
+TICKETS T ON TF.TICKET_NO =T.TICKET_NO
+JOIN FLIGHTS F ON F.FLIGHT_ID = TF.FLIGHT_ID
+GROUP BY 1,2,3
+HAVING (COUNT(F.FLIGHT_ID))>1
+
+
+7.	How many tickets are there without boarding passes?
+    Expected Output: just one number is required.
+Answer:	
+
+WITH TOTAL_TICKET_NO AS(
+SELECT *,T.TICKET_NO AS T_TICKET_NO FROM TICKETS T LEFT JOIN BOARDING_PASSES BP
+ON T.TICKET_NO=BP.TICKET_NO)
+
+SELECT COUNT(T_TICKET_NO) FROM TOTAL_TICKET_NO WHERE BOARDING_NO IS NULL
+
+
+8.	Identify details of the longest flight (using flights table)?
+    Expected Output: Flight number, departure airport, arrival airport, aircraft code and durations.
+Answer:	
+
+WITH ALL_FLIGHT_DURATION AS(
+SELECT FLIGHT_NO,DEPARTURE_AIRPORT,
+ARRIVAL_AIRPORT,AIRCRAFT_CODE ,MAX(SCHEDULED_ARRIVAL-SCHEDULED_DEPARTURE) DURATION
+FROM FLIGHTS
+GROUP BY 1,2,3,4
+ORDER BY 5 DESC
+),
+
+LONGEST_DURATION AS(
+
+SELECT * ,
+
+RANK() OVER(ORDER BY DURATION DESC) LONGEST_DURATION_RANK
+FROM ALL_FLIGHT_DURATION
+)
+
+SELECT FLIGHT_NO,DEPARTURE_AIRPORT,
+ARRIVAL_AIRPORT,AIRCRAFT_CODE ,DURATION 
+FROM LONGEST_DURATION 
+WHERE LONGEST_DURATION_RANK=1
+
+
+9.	Identify details of all the morning flights (morning means between 6AM to 11 AM, using flights table)?
+    Expected output: flight_id, flight_number, scheduled_departure, scheduled_arrival and timings.
+Answer:	
+
+SELECT FLIGHT_ID, FLIGHT_NO AS FLIGHT_NUMBER, SCHEDULED_DEPARTURE, SCHEDULED_ARRIVAL,
+       TO_CHAR(SCHEDULED_DEPARTURE, 'HH12:MI AM') AS TIMINGS
+FROM FLIGHTS
+WHERE EXTRACT(HOUR FROM SCHEDULED_DEPARTURE) * 60 + EXTRACT(MINUTE FROM SCHEDULED_DEPARTURE) BETWEEN 6 * 60 AND 11 * 60
+ORDER BY TIMINGS ASC
+
+
+10.	Identify the earliest morning flight available from every airport.
+    Expected output: flight_id, flight_number, scheduled_departure, scheduled_arrival, departure airport and timings.
+Answer:
+
+WITH MORNING_FLIGHTS AS (
+    SELECT *,
+           TO_CHAR(SCHEDULED_DEPARTURE, 'HH12:MI AM') AS TIMINGS
+    FROM FLIGHTS
+    WHERE EXTRACT(HOUR FROM SCHEDULED_DEPARTURE) * 60 + EXTRACT(MINUTE FROM SCHEDULED_DEPARTURE) BETWEEN 6 * 60 AND 11 * 60
+),
+EARLIEST_FLIGHT AS (
+    SELECT *,
+           ROW_NUMBER() OVER(PARTITION BY DEPARTURE_AIRPORT ORDER BY TIMINGS ASC) AS FLIGHT_RANK
+    FROM MORNING_FLIGHTS
+)
+SELECT FLIGHT_ID, FLIGHT_NO AS FLIGHT_NUMBER, SCHEDULED_DEPARTURE, SCHEDULED_ARRIVAL,DEPARTURE_AIRPORT,TIMINGS
+ FROM EARLIEST_FLIGHT
+ WHERE FLIGHT_RANK=1
+ ORDER BY TIMINGS ASC
+
+
+11.	Questions: Find list of airport codes in Europe/Moscow timezone
+    Expected Output:  Airport_code. 
+Answer:
+
+SELECT DISTINCT AIRPORT_CODE FROM AIRPORTS
+WHERE TIMEZONE IN('Europe/Moscow')
+
+
+12.	Write a query to get the count of seats in various fare condition for every aircraft code?
+    Expected Outputs: Aircraft_code, fare_conditions ,seat count
+Answer:
+
+SELECT AIRCRAFT_CODE,FARE_CONDITIONS,
+(SEAT_NO) SEAT_COUNT FROM SEATS
+GROUP BY 1,2
+ORDER BY 3 ASC
+
+
+13.	How many aircrafts codes have at least one Business class seats?
+    Expected Output : Count of aircraft codes
+Answer: 
+
+SELECT COUNT(DISTINCT AIRCRAFT_CODE) FROM SEATS
+WHERE FARE_CONDITIONS='Business'
+
+
+14.	Find out the name of the airport having maximum number of departure flight
+    Expected Output : Airport_name 
+Answer:
+
+WITH MAXIMUM_DEPARTURE_FLIGHT AS
+ (SELECT DEPARTURE_AIRPORT,
+    RANK() OVER(ORDER BY COUNT(*) DESC) MAX_RANK
+    FROM FLIGHTS
+    GROUP BY DEPARTURE_AIRPORT
+    ORDER BY COUNT(*) DESC)
+SELECT (AIRPORT_NAME::JSON)->>'en' AIRPORT_NAME FROM AIRPORTS 
+WHERE AIRPORT_CODE IN 
+(SELECT DEPARTURE_AIRPORT
+   FROM MAXIMUM_DEPARTURE_FLIGHT 
+WHERE MAX_RANK=1)
+
+
+15.	Find out the name of the airport having least number of scheduled departure flights
+    Expected Output : Airport_name 
+Answer: 
+
+WITH MINIMUM_DEPARTURE_FLIGHT AS 
+(SELECT DEPARTURE_AIRPORT,
+    RANK() OVER(ORDER BY COUNT(*) ASC) MIN_RANK
+    FROM FLIGHTS
+    GROUP BY DEPARTURE_AIRPORT
+    ORDER BY COUNT(*) ASC)
+
+SELECT (AIRPORT_NAME::JSON)->>'en' AIRPORT_NAME FROM AIRPORTS 
+WHERE AIRPORT_CODE IN 
+(SELECT DEPARTURE_AIRPORT
+    FROM MINIMUM_DEPARTURE_FLIGHT
+    WHERE MIN_RANK=1)
+
+
+16.	How many flights from ‘DME’ airport don’t have actual departure?
+    Expected Output : Flight Count 
+Answer:
+
+SELECT COUNT(FLIGHT_ID) FLIGHT_COUNT
+FROM FLIGHTS 
+WHERE ACTUAL_DEPARTURE IS NULL AND DEPARTURE_AIRPORT='DME'
+
+
+17.	Identify flight ids having range between 3000 to 6000
+ Expected Output : Flight_Number , aircraft_code, ranges 
+Answer:
+
+SELECT DISTINCT F.FLIGHT_NO FLIGHT_NUMBER,F.AIRCRAFT_CODE,A.RANGE
+FROM FLIGHTS F JOIN AIRCRAFTS A ON
+F.AIRCRAFT_CODE=A.AIRCRAFT_CODE
+WHERE A.RANGE BETWEEN 3000 AND 6000
+
+
+18.	Write a query to get the count of flights flying between URS and KUF?
+    Expected Output : Flight_count
+Answer:
+
+SELECT COUNT(FLIGHT_ID) AS FLIGHT_COUNT FROM FLIGHTS
+WHERE DEPARTURE_AIRPORT IN('URS','KUF') AND
+ARRIVAL_AIRPORT IN('URS','KUF')
+
+
+19.	Write a query to get the count of flights flying from either from NOZ or KRR?
+    Expected Output : Flight count 
+Answer:
+
+SELECT COUNT(FLIGHT_ID) AS FLIGHT_COUNT FROM FLIGHTS
+WHERE 
+DEPARTURE_AIRPORT='NOZ' OR
+DEPARTURE_AIRPORT='KRR'
+
+
+20.	Write a query to get the count of flights flying from KZN,DME,NBC,NJC,GDX,SGC,VKO,ROV
+    Expected Output : Departure airport ,count of flights flying from these   airports.
+Answer:
+
+SELECT DEPARTURE_AIRPORT, COUNT( FLIGHT_ID) FROM FLIGHTS
+WHERE 
+DEPARTURE_AIRPORT IN ('KZN','DME','NBC','NJC','GDX','SGC','VKO','ROV')
+GROUP BY 1 
+ORDER BY 2 ASC
+
+
+21.	Write a query to extract flight details having range between 3000 and 6000 and flying from DME
+    Expected Output :Flight_no,aircraft_code,range,departure_airport
+Answer:
+
+SELECT DISTINCT F.FLIGHT_NO,F.AIRCRAFT_CODE,A.RANGE,F.DEPARTURE_AIRPORT
+FROM FLIGHTS F JOIN AIRCRAFTS A ON
+F.AIRCRAFT_CODE=A.AIRCRAFT_CODE
+WHERE A.RANGE BETWEEN 3000 AND 6000
+AND F.DEPARTURE_AIRPORT ='DME'
+
+
+22.	Find the list of flight ids which are using aircrafts from “Airbus” company and got cancelled or delayed
+   Expected Output : Flight_id,aircraft_model
+Answer:	
+
+SELECT F.FLIGHT_ID, (A.MODEL::JSON)->>'en' AS AIRCRAFT_MODEL
+FROM FLIGHTS F
+JOIN AIRCRAFTS A ON F.AIRCRAFT_CODE = A.AIRCRAFT_CODE
+WHERE (A.MODEL::JSON)->>'en' LIKE 'Airbus%' AND (F.STATUS = 'Cancelled' OR F.STATUS = 'Delayed')
+
+
+
+23.	Find the list of flight ids which are using aircrafts from “Boeing” company and got cancelled or delayed
+    Expected Output : Flight_id,aircraft_model
+Answer:
+
+SELECT F.FLIGHT_ID, (A.MODEL::JSON)->>'en' AS AIRCRAFT_MODEL
+FROM FLIGHTS F
+JOIN AIRCRAFTS A ON F.AIRCRAFT_CODE = A.AIRCRAFT_CODE
+WHERE (A.MODEL::JSON)->>'en' LIKE 'Boeing%' AND (F.STATUS = 'Cancelled' OR F.STATUS = 'Delayed')
+
+
+24.	Which airport(name) has most cancelled flights (arriving)?
+    Expected Output : Airport_name 
+Answer:
+
+WITH TOTAL_COUNT AS (
+SELECT ARRIVAL_AIRPORT ,
+COUNT(STATUS) COUNT
+FROM FLIGHTS 
+WHERE STATUS='Cancelled'
+GROUP BY ARRIVAL_AIRPORT
+ORDER BY 1 ASC
+),
+
+AIRPORT_NAME_LIST AS (
+
+    SELECT ARRIVAL_AIRPORT AR_AIRPORT,
+    RANK() OVER(ORDER BY COUNT DESC) RANK
+    FROM TOTAL_COUNT
+)
+
+SELECT  (A.AIRPORT_NAME::JSON)->>'en' AS AIRPORT_NAME FROM AIRPORT_NAME_LIST ANL JOIN 
+AIRPORTS A ON ANL.AR_AIRPORT=A.AIRPORT_CODE
+WHERE ANL.RANK=1
+
+
+25.	Identify flight ids which are using “Airbus aircrafts”
+    Expected Output : Flight_id,aircraft_model
+Answer:
+
+SELECT distinct F.FLIGHT_ID, (A.MODEL::JSON)->>'en' AS AIRCRAFT_MODEL
+FROM FLIGHTS F
+JOIN AIRCRAFTS A ON F.AIRCRAFT_CODE = A.AIRCRAFT_CODE
+WHERE (A.MODEL::JSON)->>'en' LIKE 'Airbus%'
+
+
+26.	Identify date-wise last flight id flying from every airport?
+    Expected Output: Flight_id,flight_number,schedule_departure,departure_airport
+Answer:
+
+WITH DATE_WISE AS (
+    SELECT 
+        FLIGHT_ID,
+        FLIGHT_NO,
+        SCHEDULED_DEPARTURE,
+        DEPARTURE_AIRPORT,
+        RANK() OVER (PARTITION BY DEPARTURE_AIRPORT, CAST(SCHEDULED_DEPARTURE AS DATE) ORDER BY SCHEDULED_DEPARTURE DESC) AS rn
+    FROM FLIGHTS)
+SELECT
+    FLIGHT_ID,
+    FLIGHT_NO,
+    SCHEDULED_DEPARTURE,
+    DEPARTURE_AIRPORT
+FROM DATE_WISE
+WHERE rn = 1
+
+
+27.	Identify list of customers who will get the refund due to cancellation of the flights and how much amount they will get?
+    Expected Output : Passenger_name,total_refund.
+Answer:	
+
+SELECT T.PASSENGER_NAME,SUM(TF.AMOUNT) TOTAL_REFUND FROM 
+TICKETS T JOIN TICKET_FLIGHTS TF ON 
+T.TICKET_NO=TF.TICKET_NO JOIN 
+FLIGHTS F ON F.FLIGHT_ID =TF.FLIGHT_ID
+WHERE F.STATUS ='Cancelled'
+GROUP BY 1
+
+
+28.	Identify date wise first cancelled flight id flying for every airport?
+    Expected Output : Flight_id,flight_number,schedule_departure,departure_airport
+Answer:
+
+WITH CANCELLED_FLIGHT AS (
+    SELECT *,
+           RANK() OVER (PARTITION BY CAST(SCHEDULED_DEPARTURE AS DATE), departure_airport 
+                             ORDER BY SCHEDULED_DEPARTURE ASC) AS rn
+    FROM FLIGHTS
+    WHERE STATUS = 'Cancelled'
+)
+SELECT FLIGHT_ID, FLIGHT_NO, SCHEDULED_DEPARTURE, DEPARTURE_AIRPORT
+FROM CANCELLED_FLIGHT
+WHERE RN=1
+
+
+29.	Identify list of Airbus flight ids which got cancelled.
+    Expected Output : Flight_id
+Answer:
+
+SELECT F.FLIGHT_ID 
+FROM FLIGHTS F
+JOIN AIRCRAFTS A ON F.AIRCRAFT_CODE = A.AIRCRAFT_CODE
+WHERE (A.MODEL::JSON)->>'en' LIKE 'Airbus%' AND F.STATUS = 'Cancelled'
+
+
+30.	Identify list of flight ids having highest range.
+    Expected Output : Flight_no, range
+Answer:
+
+WITH HIGHEST_RANGE AS(
+
+    SELECT AIRCRAFT_CODE,RANGE,
+    RANK() OVER(ORDER BY RANGE DESC) RANGE_RANK
+    FROM AIRCRAFTS)
+
+SELECT DISTINCT F.FLIGHT_NO ,HR.RANGE
+FROM FLIGHTS F
+JOIN HIGHEST_RANGE HR ON F.AIRCRAFT_CODE = HR.AIRCRAFT_CODE
+WHERE HR.RANGE_RANK=1
